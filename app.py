@@ -8,10 +8,10 @@ from Cryptodome.Util import Counter
 # ================= CONFIG =================
 DB_NAME = "guardian_app1.db"
 UPLOAD_DIR = "master_videos"
-SECRET_KEY = b"SixteenByteKey!!"   # AES-128 (16 bytes)
+SECRET_KEY = b"SixteenByteKey!!"   # 16 bytes = AES-128
 GAIN = 0.006
 
-# Smart redundancy → embed watermark in 3 short segments only
+# Smart redundancy → 3 short audio segments
 WM_SEGMENTS = [(10, 3), (40, 3), (70, 3)]  # (start_sec, duration_sec)
 
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -44,9 +44,13 @@ def init_db():
 
 # ================= CRYPTO =================
 def encrypt_uid(uid: str) -> str:
-    cipher = AES.new(SECRET_KEY, AES.MODE_CTR, counter=Counter.new(64))
-    encrypted = cipher.encrypt(uid.encode())
-    return "".join(format(b, "08b") for b in encrypted).zfill(128)
+    uid_fixed = uid.zfill(8)  # fixed length for DSSS stability
+    ctr = Counter.new(128)    # ✅ FIXED (AES needs 128-bit counter)
+    cipher = AES.new(SECRET_KEY, AES.MODE_CTR, counter=ctr)
+    encrypted = cipher.encrypt(uid_fixed.encode())
+
+    # bytes → binary string
+    return "".join(format(b, "08b") for b in encrypted)
 
 # ================= DSSS =================
 def pn_sequence(n):
@@ -85,7 +89,7 @@ def watermark_video(video_path, user_id):
             wav_out = os.path.join(tmp, f"out_{idx}.wav")
             out_vid = os.path.join(tmp, f"out_{idx}.mp4")
 
-            # Extract small audio segment
+            # Extract short audio segment
             run([
                 "ffmpeg", "-y", "-i", current_video,
                 "-ss", str(start), "-t", str(dur),
@@ -109,7 +113,7 @@ def watermark_video(video_path, user_id):
                 w.setparams(params)
                 w.writeframes(wm_audio.astype(np.int16).tobytes())
 
-            # Replace audio back
+            # Merge back
             run([
                 "ffmpeg", "-y",
                 "-i", current_video,
@@ -145,6 +149,7 @@ def main():
             st.subheader("Login")
             u = st.text_input("Username", key="login_user")
             p = st.text_input("Password", type="password", key="login_pass")
+
             if st.button("Login", key="login_btn"):
                 conn = sqlite3.connect(DB_NAME)
                 row = conn.execute(
@@ -221,19 +226,21 @@ def main():
 
         if not vids:
             st.info("No videos available")
+
         for v in vids:
-            if st.button(f"Download {v[0]}", key=f"dl_{v[0]}"):
+            fname = v[0]
+            if st.button(f"Download {fname}", key=f"dl_{fname}"):
                 with st.spinner("Embedding encrypted watermark..."):
                     data = watermark_video(
-                        os.path.join(UPLOAD_DIR, v[0]),
+                        os.path.join(UPLOAD_DIR, fname),
                         st.session_state.uid
                     )
                     st.download_button(
                         "Click to Download",
                         data,
-                        file_name=f"secured_{v[0]}",
+                        file_name=f"secured_{fname}",
                         mime="video/mp4",
-                        key=f"final_dl_{v[0]}"
+                        key=f"final_dl_{fname}"
                     )
 
     # Users
