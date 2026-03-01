@@ -10,7 +10,7 @@ DB_NAME = "guardian.db"
 UPLOAD_DIR = "master_videos"
 SECRET_KEY = b"SixteenByteKey!!"
 
-GAIN = 0.008
+GAIN = 0.03
 WM_SEGMENTS = [(10,3), (40,3), (70,3)]
 
 BIT_LEN_NONCE = 64
@@ -208,3 +208,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
